@@ -1,0 +1,104 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPO_NAME: alertforge
+  DATA_BUCKET: alertforge-data
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.sha_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Download model artifacts from S3
+        run: |
+          mkdir -p data/models
+          aws s3 sync s3://${{ env.DATA_BUCKET }}/models/ data/models/ || echo "No models yet — cold start"
+
+      - name: Build and push image
+        id: meta
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          SHA_TAG="sha-$(git rev-parse --short HEAD)"
+          echo "sha_tag=$SHA_TAG" >> "$GITHUB_OUTPUT"
+
+          docker build \
+            --cache-from $REGISTRY/$ECR_REPO_NAME:dev \
+            -t $REGISTRY/$ECR_REPO_NAME:$SHA_TAG \
+            -t $REGISTRY/$ECR_REPO_NAME:dev \
+            .
+
+          docker push $REGISTRY/$ECR_REPO_NAME:$SHA_TAG
+          docker push $REGISTRY/$ECR_REPO_NAME:dev
+
+  deploy-dev:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to dev
+        run: |
+          aws apprunner start-deployment \
+            --service-arn ${{ vars.DEV_SERVICE_ARN }}
+
+  deploy-prod:
+    needs: [build, deploy-dev]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Promote image to prod
+        env:
+          REGISTRY: ${{ vars.ECR_REGISTRY }}
+        run: |
+          SHA_TAG="${{ needs.build.outputs.image_tag }}"
+
+          # Pull the dev image by its SHA tag, retag as :prod
+          MANIFEST=$(aws ecr batch-get-image \
+            --repository-name $ECR_REPO_NAME \
+            --image-ids imageTag=$SHA_TAG \
+            --query 'images[0].imageManifest' --output text)
+
+          aws ecr put-image \
+            --repository-name $ECR_REPO_NAME \
+            --image-tag prod \
+            --image-manifest "$MANIFEST" || true
+
+      - name: Deploy to prod
+        run: |
+          aws apprunner start-deployment \
+            --service-arn ${{ vars.PROD_SERVICE_ARN }}

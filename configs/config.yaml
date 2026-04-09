@@ -1,0 +1,19 @@
+# AlertForge configuration
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  models_dir: "data/models"
+
+# Broker API endpoints (for future integration)
+brokers:
+  fink:
+    base_url: "https://fink-portal.org"
+  alerce:
+    base_url: "https://api.alerce.online"
+  tns:
+    base_url: "https://www.wis-tns.org/api"
