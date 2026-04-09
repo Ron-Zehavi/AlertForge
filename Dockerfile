@@ -19,9 +19,6 @@ RUN pip install --no-cache-dir ".[web]"
 # Copy built frontend into package
 COPY --from=frontend /app/web/dist/ src/alertforge/web_dist/
 
-# Copy model artifacts if present
-COPY data/models/ data/models/ 2>/dev/null || true
-
 USER appuser
 EXPOSE 8000
 

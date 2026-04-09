@@ -19,7 +19,7 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  default = "alertforge"
+  default = "asteroid"
 }
 
 variable "project" {
