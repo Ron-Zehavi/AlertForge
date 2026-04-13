@@ -12,6 +12,13 @@ terraform {
 provider "aws" {
   region  = var.aws_region
   profile = var.aws_profile
+
+  default_tags {
+    tags = {
+      Project   = "alertforge"
+      ManagedBy = "terraform"
+    }
+  }
 }
 
 variable "aws_region" {
@@ -19,7 +26,7 @@ variable "aws_region" {
 }
 
 variable "aws_profile" {
-  default = "asteroid"
+  default = "personal"
 }
 
 variable "project" {
