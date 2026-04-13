@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Block direct pushes to main — all changes must go through PRs
+
+current_branch=$(git symbolic-ref HEAD 2>/dev/null | sed 's|refs/heads/||')
+
+if [ "$current_branch" = "main" ]; then
+  echo "ERROR: Direct push to main is not allowed."
+  echo "Create a feature branch and open a PR instead:"
+  echo "  git checkout -b feature/my-change"
+  echo "  git push -u origin feature/my-change"
+  echo "  gh pr create"
+  exit 1
+fi
